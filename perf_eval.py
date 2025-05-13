@@ -19,7 +19,7 @@ def load_model(
     
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype="float16",
+        torch_dtype="float32",
         device_map="auto"
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -58,15 +58,20 @@ def benchmark(fn, warmup_iters=10, benchmark_iters=100):
     elapsed_time = start_event.elapsed_time(end_event) / benchmark_iters
     return elapsed_time
 
-batch_size = 2
+torch.set_float32_matmul_precision('high')
+batch_size = 16
 model, tokenizer = load_model(
     backend='modelscope',
     model_name='Qwen/Qwen3-1.7B',
-    method='griffin',
-    topk_ratio=0.5,
+    method='dense',
+    topk_ratio=0.01,
     recall_ratio=0.01,
     cache_size=1
 )
+
+dummy_input_ids = torch.randint(0, 100, (1, 32)).to(model.device)
+model(dummy_input_ids)
+
 input_ids = torch.randint(0, 100, (batch_size, 1)).to(model.device)
 def forward_fn():
     with torch.no_grad():
