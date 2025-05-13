@@ -25,18 +25,6 @@ def _evaluate_rouge(pred, label):
 def _average_score(scores):
     return sum(scores) / len(scores)
 
-def _log_prob_last_token(model, tokenizer, text):
-    input_ids = tokenizer(text, return_tensors='pt').input_ids.to(model.device)
-    context = input_ids[:, :-1]
-    target = input_ids[:, -1]
-    with torch.no_grad():
-        outputs = model(context, use_cache=True)
-        past_key_values = outputs.past_key_values
-    logits = model(target.unsqueeze(0), past_key_values=past_key_values).logits
-    log_probs = torch.log_softmax(logits[:, -1, :], dim=-1)
-    target_log_prob = log_probs[0, target].item()
-    return target_log_prob
-
 def _log_prob(model, tokenizer, text):
     inputs = tokenizer(text, return_tensors='pt').to(model.device)
     with torch.no_grad():
@@ -147,8 +135,8 @@ def evaluate_piqa(model, tokenizer, limit=0):
     for request in progress_bar:
         text0 = f"Question: {request['goal']}\nAnswer: {request['sol1']}"
         text1 = f"Question: {request['goal']}\nAnswer: {request['sol2']}"
-        prob0 = _log_prob_last_token(model, tokenizer, text0)
-        prob1 = _log_prob_last_token(model, tokenizer, text1)
+        prob0 = _log_prob(model, tokenizer, text0)
+        prob1 = _log_prob(model, tokenizer, text1)
         predicted_label = 0 if prob0 > prob1 else 1
         if predicted_label == request['label']:
             correct += 1
@@ -165,8 +153,8 @@ def evaluate_boolq(model, tokenizer, limit=0):
     for request in progress_bar:
         text0 = f"{request['passage']}\nQuestion: {request['question']}\nAnswer: no"
         text1 = f"{request['passage']}\nQuestion: {request['question']}\nAnswer: yes"
-        prob0 = _log_prob_last_token(model, tokenizer, text0)
-        prob1 = _log_prob_last_token(model, tokenizer, text1)
+        prob0 = _log_prob(model, tokenizer, text0)
+        prob1 = _log_prob(model, tokenizer, text1)
         predicted_label = 0 if prob0 > prob1 else 1
         if predicted_label == request['answer']:
             correct += 1
