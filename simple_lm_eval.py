@@ -187,6 +187,8 @@ def evaluate(
         return evaluate_cnn(model, tokenizer, limit)
     elif task == 'piqa':
         return evaluate_piqa(model, tokenizer, limit)
+    elif task == 'boolq':
+        return evaluate_boolq(model, tokenizer, limit)
     else:
         raise NotImplementedError(f"Task {task} not implemented.")
 
@@ -233,7 +235,7 @@ args.add_argument('--method', type=str, default='griffin', choices=['griffin', '
 args.add_argument('--topk_ratio', type=float, default=0.5, help='Top-k ratio for model reduction.')
 args.add_argument('--recall_ratio', type=float, default=0.5, help='Recall ratio for model reduction.')
 args.add_argument('--cache_size', type=int, default=4, help='Cache size for model reduction.')
-args.add_argument('--task', type=str, default='xsum', choices=['xsum', 'cnn', 'piqa'], help='Task to evaluate.')
+args.add_argument('--task', type=str, default='xsum', choices=['xsum', 'cnn', 'piqa', 'boolq'], help='Task to evaluate.')
 args.add_argument('--limit', type=int, default=0, help='Limit for the number of samples to evaluate.')
 args = args.parse_args()
 
