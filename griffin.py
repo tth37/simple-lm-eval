@@ -12,10 +12,10 @@ def select_neurons(neuron_stat, method, k):
 
     return weight, indices
 
-def get_llama_griffin(model, topk_ratio):
+def get_llama_griffin(model, topk_ratio, mode):
     config = model.config
     for i, l in enumerate(model.model.layers):
-        new_mlp = LlamaMLP(config, topk_ratio)
+        new_mlp = LlamaMLP(config, topk_ratio, mode)
 
         new_mlp.gate_proj = l.mlp.gate_proj
         new_mlp.up_proj = l.mlp.up_proj
@@ -28,7 +28,7 @@ def get_llama_griffin(model, topk_ratio):
 
 
 class LlamaMLP(nn.Module):
-    def __init__(self, config, k_factor):
+    def __init__(self, config, k_factor, mode):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -39,8 +39,8 @@ class LlamaMLP(nn.Module):
         self.act_fn = F.silu
         
         self.k_factor = k_factor
-        self.mode = 'gen'
-        assert self.mode in ['gen']
+        self.mode = mode
+        assert self.mode in ['gen', 'class']
 
 
     def prepare_reduced_weights(self, topk_indices):
