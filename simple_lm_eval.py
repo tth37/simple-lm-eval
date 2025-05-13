@@ -157,6 +157,24 @@ def evaluate_piqa(model, tokenizer, limit=0):
         "accuracy": correct / len(requests)
     }
 
+def evaluate_boolq(model, tokenizer, limit=0):
+    requests = _read_jsonl('data/boolq_0shot.jsonl')
+    requests = requests[:limit] if limit > 0 else requests
+    correct = 0
+    progress_bar = tqdm(requests, desc="Evaluating", unit="sample")
+    for request in progress_bar:
+        text0 = f"{request['passage']}\nQuestion: {request['question']}\nAnswer: no"
+        text1 = f"{request['passage']}\nQuestion: {request['question']}\nAnswer: yes"
+        prob0 = _log_prob_last_token(model, tokenizer, text0)
+        prob1 = _log_prob_last_token(model, tokenizer, text1)
+        predicted_label = 0 if prob0 > prob1 else 1
+        if predicted_label == request['answer']:
+            correct += 1
+        progress_bar.set_description(f"Accuracy: {correct / (progress_bar.n + 1):.4f}")
+    return {
+        "accuracy": correct / len(requests)
+    }
+
 def evaluate(
     model,
     tokenizer,
@@ -179,6 +197,7 @@ def load_model(
     topk_ratio: float,
     recall_ratio: float,
     cache_size: int,
+    mode: Union[Literal['gen'], Literal['class']]
 ):
     if backend == 'transformers':
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -196,7 +215,7 @@ def load_model(
 
     if method == 'griffin':
         from griffin import get_llama_griffin
-        model = get_llama_griffin(model, topk_ratio)
+        model = get_llama_griffin(model, topk_ratio, mode)
     elif method == 'lru':
         from lru import get_llama_lru
         model = get_llama_lru(model, topk_ratio, recall_ratio, cache_size)
@@ -206,8 +225,6 @@ def load_model(
         raise ValueError(f"Unsupported method: {method}")
 
     return model.eval(), tokenizer
-
-
 
 args = argparse.ArgumentParser()
 args.add_argument('--backend', type=str, default='transformers', choices=['transformers', 'modelscope'], help='Backend to use for loading the model.')
@@ -220,13 +237,16 @@ args.add_argument('--task', type=str, default='xsum', choices=['xsum', 'cnn', 'p
 args.add_argument('--limit', type=int, default=0, help='Limit for the number of samples to evaluate.')
 args = args.parse_args()
 
+args.mode = 'class' if args.task in ['piqa'] else 'gen'
+
 model, tokenizer = load_model(
     backend=args.backend,
     model_name=args.model_name,
     method=args.method,
     topk_ratio=args.topk_ratio,
     recall_ratio=args.recall_ratio,
-    cache_size=args.cache_size
+    cache_size=args.cache_size,
+    mode=args.mode
 )
 result = evaluate(
     model=model,
@@ -244,52 +264,3 @@ print(f"limit: {args.limit}")
 print(f"Evaluation result for task {args.task}:")
 for key, value in result.items():
     print(f"{key}: {value:.4f}")
-
-
-# from modelscope import AutoModelForCausalLM, AutoTokenizer
-# # from transformers import AutoModelForCausalLM, AutoTokenizer
-# from griffin import get_llama_griffin
-# # from llama_lru import get_llama_lru
-# # # model_name = "meta-llama/Llama-2-7b-hf"
-# model_name = "Qwen/Qwen3-0.6B"
-# model = AutoModelForCausalLM.from_pretrained(
-#     model_name,
-#     torch_dtype="float16",
-#     device_map="auto"
-# )
-# # model = get_llama_griffin(model, 0.5)
-# # model = get_llama_lru(model, 0.75, 0.75, 8)
-# model.eval()
-# tokenizer = AutoTokenizer.from_pretrained(model_name)
-# # input_ids = tokenizer("Hello, how are you?", return_tensors="pt").input_ids.to(model.device)
-# # output = model.generate(
-# #     input_ids=input_ids,
-# #     max_length=50,
-# # )
-# # print(tokenizer.decode(output[0], skip_special_tokens=True))
-# # task = 'xsum'
-# # limit = 30
-# # result = evaluate(model, tokenizer, task, limit)
-# # print(f"Evaluation result for task {task}:")
-# # print(f"Rouge-1: {result['rouge-1']:.4f}")
-# # print(f"Rouge-2: {result['rouge-2']:.4f}")
-# # print(f"Rouge-L: {result['rouge-l']:.4f}")
-
-# # text1 = "Question: fire\nAnswer: can melt humans "
-# # text2 = "Question: fire\nAnswer: can melt water "
-
-# # prob1 = _log_prob_last_token(model, tokenizer, text1)
-# # prob2 = _log_prob_last_token(model, tokenizer, text2)
-# # predicted_label = 0 if prob1 > prob2 else 1
-
-# # print(f"Log probability of text1: {prob1:.4f}")
-# # print(f"Log probability of text2: {prob2:.4f}")
-# # print(f"Full Log probability of text1: {_log_prob(model, tokenizer, text1):.4f}")
-# # print(f"Full Log probability of text2: {_log_prob(model, tokenizer, text2):.4f}")
-# # print(f"Predicted label: {predicted_label}")
-
-# task = 'piqa'
-# limit = 0
-# result = evaluate(model, tokenizer, task, limit)
-# print(f"Evaluation result for task {task}:")
-# print(f"Accuracy: {result['accuracy']:.4f}")

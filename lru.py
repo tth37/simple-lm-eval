@@ -2,7 +2,7 @@ from torch import nn
 import torch
 
 class LRUReducedLinear(nn.Module):
-    def __init__(self, in_features, out_features, bias, topk_ratio, recall_ratio, cache_size, device, dtype):
+    def __init__(self, in_features, out_features, bias, topk_ratio, recall_ratio, cache_size, device, dtype, mode):
         super(LRUReducedLinear, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -22,9 +22,10 @@ class LRUReducedLinear(nn.Module):
         self.register_buffer('lru', torch.zeros(cache_size, dtype=torch.long, device=device))
         self.lru_counter = 0
         self.lru_valid = 0
+        self.mode = mode
 
     @classmethod
-    def from_linear(cls, linear, topk_ratio, recall_ratio, cache_size):
+    def from_linear(cls, linear, topk_ratio, recall_ratio, cache_size, mode):
         in_features = linear.in_features
         out_features = linear.out_features
         bias = linear.bias is not None
@@ -38,7 +39,8 @@ class LRUReducedLinear(nn.Module):
             recall_ratio=recall_ratio,
             cache_size=cache_size,
             device=device,
-            dtype=dtype
+            dtype=dtype,
+            mode=mode
         )
         lru_reduced_linear.weight.data = linear.weight.data
         if bias:
@@ -66,44 +68,74 @@ class LRUReducedLinear(nn.Module):
 
     @torch.no_grad()
     def forward(self, x):
-        bsz, seq, _ = x.shape
-        if seq != 1:
-            x = x.view(bsz * seq, -1)
+        if self.mode == 'gen':
+            bsz, seq, _ = x.shape
+            if seq != 1:
+                x = x.view(bsz * seq, -1)
+                result = x @ self.weight.T
+                if self.bias is not None:
+                    result += self.bias
+                result = result.view(bsz, seq, -1)
+                return result
+            
+            x = x.view(bsz, -1)
+
+            self.lru_counter += 1
+
+            # Get top-k indices based on sum of absolute values along columns
+            scores = torch.sum(torch.abs(x), dim=0)
+            _, indices = torch.topk(scores, k=self.topk_size, dim=0, sorted=False)
+
+            mask = torch.zeros_like(scores, dtype=torch.bool, device=x.device)
+            mask.scatter_(0, indices, True)
+
+            max_recall, max_idx = (mask & self.cached_mask).sum(dim=1).max(dim=0)
+
+            if max_recall < self.recall_size:
+                max_idx = self._cache_slice(indices, mask)
+
+            self.lru[max_idx] = self.lru_counter
+
+            cached_weight = self.cached_weight[max_idx]
+            cached_indices = self.cached_indices[max_idx]
+
+            result = x[:, cached_indices] @ cached_weight.T
+            if self.bias is not None:
+                result += self.bias
+
+            result = result.view(bsz, 1, -1)
+            return result
+        elif self.mode == 'class':
+            
+            bsz, seq, _ = x.shape
+            assert seq > 1
+            assert bsz == 1
+            x = x.view(seq, -1)
+            prompt_scores = torch.sum(torch.abs(x[:-1]), dim=0)
+            _, prompt_indices = torch.topk(prompt_scores, k=self.topk_size, dim=0, sorted=False)
+            prompt_mask = torch.zeros_like(prompt_scores, dtype=torch.bool, device=x.device)
+            prompt_mask.scatter_(0, prompt_indices, True)
+
+            target_scores = torch.sum(torch.abs(x[-1].unsqueeze(0)), dim=0)
+            _, target_indices = torch.topk(target_scores, k=self.topk_size, dim=0, sorted=False)
+            target_mask = torch.zeros_like(target_scores, dtype=torch.bool, device=x.device)
+            target_mask.scatter_(0, target_indices, True)
+
+            recall = (prompt_mask & target_mask).sum(dim=0)
+            if recall < self.recall_size:
+                mask = target_mask
+            else:
+                mask = prompt_mask
+
+            x[-1] = x[-1].masked_fill(mask, 0.0)
             result = x @ self.weight.T
             if self.bias is not None:
                 result += self.bias
+            
             result = result.view(bsz, seq, -1)
             return result
-        
-        x = x.view(bsz, -1)
-
-        self.lru_counter += 1
-
-        # Get top-k indices based on sum of absolute values along columns
-        scores = torch.sum(torch.abs(x), dim=0)
-        _, indices = torch.topk(scores, k=self.topk_size, dim=0, sorted=False)
-
-        mask = torch.zeros_like(scores, dtype=torch.bool, device=x.device)
-        mask.scatter_(0, indices, True)
-
-        max_recall, max_idx = (mask & self.cached_mask).sum(dim=1).max(dim=0)
-
-        if max_recall < self.recall_size:
-            max_idx = self._cache_slice(indices, mask)
-
-        self.lru[max_idx] = self.lru_counter
-
-        cached_weight = self.cached_weight[max_idx]
-        cached_indices = self.cached_indices[max_idx]
-
-        result = x[:, cached_indices] @ cached_weight.T
-        if self.bias is not None:
-            result += self.bias
-
-        result = result.view(bsz, 1, -1)
-        return result
     
-def get_llama_lru(model, topk_ratio, recall_ratio, cache_size):
+def get_llama_lru(model, topk_ratio, recall_ratio, cache_size, mode):
     """
     Get LRU reduced linear layer from a model.
     """
@@ -112,18 +144,21 @@ def get_llama_lru(model, topk_ratio, recall_ratio, cache_size):
             layer.mlp.gate_proj,
             topk_ratio=topk_ratio,
             recall_ratio=recall_ratio,
-            cache_size=cache_size
+            cache_size=cache_size,
+            mode=mode
         )
         layer.mlp.up_proj = LRUReducedLinear.from_linear(
             layer.mlp.up_proj,
             topk_ratio=topk_ratio,
             recall_ratio=recall_ratio,
-            cache_size=cache_size
+            cache_size=cache_size,
+            mode=mode
         )
         layer.mlp.down_proj = LRUReducedLinear.from_linear(
             layer.mlp.down_proj,
             topk_ratio=topk_ratio,
             recall_ratio=recall_ratio,
-            cache_size=cache_size
+            cache_size=cache_size,
+            mode=mode
         )
     return model
