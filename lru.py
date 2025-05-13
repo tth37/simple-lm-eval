@@ -23,6 +23,7 @@ class LRUReducedLinear(nn.Module):
         self.lru_counter = 0
         self.lru_valid = 0
         self.mode = mode
+        assert self.mode in ['gen', 'class'], f"Unsupported mode: {self.mode}"
 
     @classmethod
     def from_linear(cls, linear, topk_ratio, recall_ratio, cache_size, mode):

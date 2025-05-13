@@ -208,7 +208,7 @@ def load_model(
         model = get_llama_griffin(model, topk_ratio, mode)
     elif method == 'lru':
         from lru import get_llama_lru
-        model = get_llama_lru(model, topk_ratio, recall_ratio, cache_size)
+        model = get_llama_lru(model, topk_ratio, recall_ratio, cache_size, mode)
     elif method == 'dense':
         pass
     else:
