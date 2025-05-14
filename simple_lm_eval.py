@@ -227,7 +227,7 @@ args.add_argument('--task', type=str, default='xsum', choices=['xsum', 'cnn', 'p
 args.add_argument('--limit', type=int, default=0, help='Limit for the number of samples to evaluate.')
 args = args.parse_args()
 
-args.mode = 'class' if args.task in ['piqa'] else 'gen'
+args.mode = 'class' if args.task in ['piqa', 'boolq'] else 'gen'
 
 model, tokenizer = load_model(
     backend=args.backend,

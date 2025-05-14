@@ -59,18 +59,17 @@ def benchmark(fn, warmup_iters=10, benchmark_iters=100):
     return elapsed_time
 
 torch.set_float32_matmul_precision('high')
-batch_size = 16
+batch_size = 32
+
+
 model, tokenizer = load_model(
-    backend='modelscope',
-    model_name='Qwen/Qwen3-1.7B',
+    backend='transformers',
+    model_name='Qwen/Qwen3-14B',
     method='dense',
     topk_ratio=0.01,
     recall_ratio=0.01,
     cache_size=1
 )
-
-dummy_input_ids = torch.randint(0, 100, (1, 32)).to(model.device)
-model(dummy_input_ids)
 
 input_ids = torch.randint(0, 100, (batch_size, 1)).to(model.device)
 def forward_fn():
@@ -78,4 +77,22 @@ def forward_fn():
         output = model(input_ids)
 
 latency = benchmark(forward_fn)
-print(f"Latency: {latency:.4f} ms")
+print(f"Dense Latency: {latency:.4f} ms")
+
+
+model, tokenizer = load_model(
+    backend='modelscope',
+    model_name='Qwen/Qwen3-14B',
+    method='lru',
+    topk_ratio=0.75,
+    recall_ratio=0.01,
+    cache_size=1
+)
+
+input_ids = torch.randint(0, 100, (batch_size, 1)).to(model.device)
+def forward_fn():
+    with torch.no_grad():
+        output = model(input_ids)
+
+latency = benchmark(forward_fn)
+print(f"LRU Latency: {latency:.4f} ms")

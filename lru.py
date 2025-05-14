@@ -84,26 +84,23 @@ class LRUReducedLinear(nn.Module):
             self.lru_counter += 1
 
             # Get top-k indices based on sum of absolute values along columns
-            # scores = torch.sum(torch.abs(x), dim=0)
-            # _, indices = torch.topk(scores, k=self.topk_size, dim=0, sorted=False)
+            scores = torch.sum(torch.abs(x), dim=0)
+            _, indices = torch.topk(scores, k=self.topk_size, dim=0, sorted=False)
 
-            # mask = torch.zeros_like(scores, dtype=torch.bool, device=x.device)
-            # mask.scatter_(0, indices, True)
+            mask = torch.zeros_like(scores, dtype=torch.bool, device=x.device)
+            mask.scatter_(0, indices, True)
 
-            # max_recall, max_idx = (mask & self.cached_mask).sum(dim=1).max(dim=0)
+            max_recall, max_idx = (mask & self.cached_mask).sum(dim=1).max(dim=0)
 
-            # if max_recall < self.recall_size:
-            #     max_idx = self._cache_slice(indices, mask)
+            if max_recall < self.recall_size:
+                max_idx = self._cache_slice(indices, mask)
 
-            # self.lru[max_idx] = self.lru_counter
-
-            max_idx = 0
+            self.lru[max_idx] = self.lru_counter
 
             cached_weight = self.cached_weight[max_idx]
             cached_indices = self.cached_indices[max_idx]
 
             result = x[:, cached_indices] @ cached_weight.T
-            # result = x @ self.weight.T
             if self.bias is not None:
                 result += self.bias
 

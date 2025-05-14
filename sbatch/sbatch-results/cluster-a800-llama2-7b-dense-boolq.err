@@ -1,0 +1,15 @@
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:06<00:06,  6.29s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:08<00:00,  3.64s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:08<00:00,  4.03s/it]
+Traceback (most recent call last):
+  File "/home/fit/renju/WORK/tianhaodong/vllm-examples/simple-lm-eval/simple_lm_eval.py", line 241, in <module>
+    result = evaluate(
+             ^^^^^^^^^
+  File "/home/fit/renju/WORK/tianhaodong/vllm-examples/simple-lm-eval/simple_lm_eval.py", line 179, in evaluate
+    return evaluate_boolq(model, tokenizer, limit)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fit/renju/WORK/tianhaodong/vllm-examples/simple-lm-eval/simple_lm_eval.py", line 149, in evaluate_boolq
+    requests = _read_jsonl('data/boolq_0shot.jsonl')
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fit/renju/WORK/tianhaodong/vllm-examples/simple-lm-eval/simple_lm_eval.py", line 10, in _read_jsonl
+    with open(file, 'r') as f:
+         ^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'data/boolq_0shot.jsonl'
